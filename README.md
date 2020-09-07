@@ -4,6 +4,10 @@ Script to help make basic additions to multiple GitHub repositories.
 
 Currently this just adds a single file and opens a pull request.
 
+## Installation
+
+Run `npm install` to install dependencies.
+
 ## Usage
 
 Set the environment variable `GITHUB_TOKEN` to your GitHub personal token.
