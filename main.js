@@ -9,49 +9,46 @@ const fs = require("fs").promises;
 var octokit;
 
 async function getCurrent(baseRepo) {
-  let user, repo, ref, commit, tree;
   try {
-    user = await octokit.users.getAuthenticated();
+    var { data: user } = await octokit.users.getAuthenticated();
   } catch (err) {
     throw Error(`Failed to get current user: ${err}`);
   }
   try {
-    repo = await octokit.repos.get({ ...baseRepo });
+    var { data: repo } = await octokit.repos.get({ ...baseRepo });
   } catch (err) {
     throw Error(`Failed to get base repo: ${err}`);
   }
 
   try {
-    ref = await octokit.git.getRef({
+    var { data: ref } = await octokit.git.getRef({
       ...baseRepo,
-      ref: `heads/${repo.data.default_branch}`,
+      ref: `heads/${repo.default_branch}`,
     });
-    commit = await octokit.git.getCommit({
+    var { data: commit } = await octokit.git.getCommit({
       ...baseRepo,
-      commit_sha: ref.data.object.sha,
+      commit_sha: ref.object.sha,
     });
-    tree = await octokit.git.getTree({
+    var { data: tree } = await octokit.git.getTree({
       ...baseRepo,
-      tree_sha: commit.data.tree.sha,
+      tree_sha: commit.tree.sha,
     });
   } catch (err) {
     throw Error(`Failed to get base repo default ref: ${err}`);
   }
-  console.log(
-    `User: ${user.data.login}, Base repository: ${repo.data.full_name}`
-  );
+  console.log(`User: ${user.login}, Base repository: ${repo.full_name}`);
   return {
-    user: user.data,
-    repo: repo.data,
-    ref: ref.data,
-    commit: commit.data,
-    tree: tree.data,
+    user: user,
+    repo: repo,
+    ref: ref,
+    commit: commit,
+    tree: tree,
   };
 }
 
 async function getOrCreateFork(current) {
   try {
-    const fork = await octokit.repos.get({
+    const { data: fork } = await octokit.repos.get({
       owner: current.user.login,
       repo: current.repo.name,
     });
@@ -60,7 +57,7 @@ async function getOrCreateFork(current) {
     if (err.status != 404) {
       throw err;
     }
-    const fork = await octokit.repos.createFork({
+    const { data: fork } = await octokit.repos.createFork({
       owner: current.repo.owner.login,
       repo: current.repo.name,
     });
@@ -76,33 +73,33 @@ async function createNewFile(current, source, dest, message) {
   };
 
   const content = await fs.readFile(source);
-  const blob = await octokit.git.createBlob({
+  const { data: blob } = await octokit.git.createBlob({
     ...headRepo,
     content: content.toString("base64"),
     encoding: "base64",
   });
 
-  const newtree = await octokit.git.createTree({
+  const { data: newtree } = await octokit.git.createTree({
     ...headRepo,
     tree: [
       {
         path: dest,
         type: "blob",
         mode: "100644",
-        sha: blob.data.sha,
+        sha: blob.sha,
       },
     ],
     base_tree: current.tree.sha,
   });
 
-  const newcommit = await octokit.git.createCommit({
+  const { data: newcommit } = await octokit.git.createCommit({
     ...headRepo,
     message: message,
-    tree: newtree.data.sha,
+    tree: newtree.sha,
     parents: [current.ref.object.sha],
   });
-  console.log(`Created commit ${newcommit.data.sha}`);
-  return newcommit.data;
+  console.log(`Created commit ${newcommit.sha}`);
+  return newcommit;
 }
 
 async function createOrUpdateRef(current, commit, branch, force) {
@@ -112,28 +109,28 @@ async function createOrUpdateRef(current, commit, branch, force) {
   };
 
   // This returns matching prefixes, not exact matches
-  const currentRef = await octokit.git.listMatchingRefs({
+  const { data: currentRef } = await octokit.git.listMatchingRefs({
     ...headRepo,
     ref: `heads/${branch}`,
   });
 
-  if (currentRef.data.some((r) => r.ref === `refs/heads/${branch}`)) {
-    const ref = await octokit.git.updateRef({
+  if (currentRef.some((r) => r.ref === `refs/heads/${branch}`)) {
+    const { data: ref } = await octokit.git.updateRef({
       ...headRepo,
       ref: `heads/${branch}`,
       sha: commit.sha,
       force: force,
     });
-    console.log(`Updated branch ${ref.data.ref}`);
-    return ref.data;
+    console.log(`Updated branch ${ref.ref}`);
+    return ref;
   } else {
-    const ref = await octokit.git.createRef({
+    const { data: ref } = await octokit.git.createRef({
       ...headRepo,
       ref: `refs/heads/${branch}`,
       sha: commit.sha,
     });
-    console.log(`Created branch ${ref.data.ref}`);
-    return ref.data;
+    console.log(`Created branch ${ref.ref}`);
+    return ref;
   }
 }
 
@@ -144,26 +141,24 @@ async function createPull(baseRepo, branch, source, dest, title, body, force) {
   await createOrUpdateRef(current, commit, branch, force);
   const head = `${current.user.login}:${branch}`;
 
-  const currentPull = await octokit.pulls.list({
+  const { data: currentPull } = await octokit.pulls.list({
     ...baseRepo,
     head: head,
   });
 
-  if (currentPull.data.length) {
-    const pull = await octokit.pulls.update({
+  if (currentPull.length) {
+    const { data: pull } = await octokit.pulls.update({
       ...baseRepo,
       title: title,
-      pull_number: currentPull.data[0].number,
+      pull_number: currentPull[0].number,
       base: current.repo.default_branch,
       body: body,
       maintainer_can_modify: true,
     });
-    console.log(
-      `Updated pull request #${pull.data.number} ${pull.data.html_url}`
-    );
+    console.log(`Updated pull request #${pull.number} ${pull.html_url}`);
     return pull;
   } else {
-    const pull = await octokit.pulls.create({
+    const { data: pull } = await octokit.pulls.create({
       ...baseRepo,
       title: title,
       head: head,
@@ -171,9 +166,7 @@ async function createPull(baseRepo, branch, source, dest, title, body, force) {
       body: body,
       maintainer_can_modify: true,
     });
-    console.log(
-      `Created pull request #${pull.data.number} ${pull.data.html_url}`
-    );
+    console.log(`Created pull request #${pull.number} ${pull.html_url}`);
     return pull;
   }
 }
@@ -199,7 +192,10 @@ function run(file, cmdObj) {
     );
     exit(2);
   }
-  octokit = new Octokit({ auth: token.trim() });
+  octokit = new Octokit({
+    auth: token.trim(),
+    userAgent: "github-batch-updater",
+  });
 
   createPull(
     baseRepo,
