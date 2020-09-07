@@ -69,7 +69,7 @@ async function getOrCreateFork(current) {
   }
 }
 
-async function createNewFile(current, source, dest) {
+async function createNewFile(current, source, dest, message) {
   const headRepo = {
     owner: current.user.login,
     repo: current.repo.name,
@@ -97,7 +97,7 @@ async function createNewFile(current, source, dest) {
 
   const newcommit = await octokit.git.createCommit({
     ...headRepo,
-    message: "Test commit",
+    message: message,
     tree: newtree.data.sha,
     parents: [current.ref.object.sha],
   });
@@ -140,7 +140,7 @@ async function createOrUpdateRef(current, commit, branch, force) {
 async function createPull(baseRepo, branch, source, dest, title, body, force) {
   const current = await getCurrent(baseRepo);
   await getOrCreateFork(current);
-  const commit = await createNewFile(current, source, dest);
+  const commit = await createNewFile(current, source, dest, body);
   await createOrUpdateRef(current, commit, branch, force);
   const head = `${current.user.login}:${branch}`;
 
