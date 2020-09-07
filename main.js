@@ -1,19 +1,27 @@
 #!/usr/bin/env node
 "use strict";
 
-const { Octokit } = require("@octokit/rest");
-const { exit, env } = require("process");
-const fs = require("fs").promises;
-
+// <<<<< Edit these variables
+// The base repository (head fork)
 const baseRepo = { owner: "manicstreetpreacher", repo: "github-api-test" };
+// Path to the file to be added
 const source = "README.md";
+// Destination in the repository for the file
 const dest = "dir2/README-2.md";
-const title = "This is a test";
+// Head branch, will be overwritten if it already exists
 const branch = "test-new-ref";
+// Pull request title
+const title = "This is a test";
+// Pull request body
 const body = `This is a test of creating a PR using [octokit rest.js](https://github.com/octokit/rest.js/)
 
 :octocat: :smile: :star:
 `;
+// >>>>>
+
+const { Octokit } = require("@octokit/rest");
+const { exit, env } = require("process");
+const fs = require("fs").promises;
 
 const token = env["GITHUB_TOKEN"];
 if (!token) {
