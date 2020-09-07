@@ -4,7 +4,8 @@
   "description": "Make basic additions to multiple GitHub repositories",
   "main": "main.js",
   "dependencies": {
-    "@octokit/rest": "^18.0.5"
+    "@octokit/rest": "^18.0.5",
+    "commander": "^6.1.0"
   },
   "devDependencies": {
     "eslint": "^7.8.1",

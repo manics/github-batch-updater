@@ -1,37 +1,12 @@
 #!/usr/bin/env node
 "use strict";
 
-// <<<<< Edit these variables
-// The base repository (head fork)
-const baseRepo = { owner: "manicstreetpreacher", repo: "github-api-test" };
-// Path to the file to be added
-const source = "README.md";
-// Destination in the repository for the file
-const dest = "dir2/README-2.md";
-// Head branch, will be overwritten if it already exists
-const branch = "test-new-ref";
-// Pull request title
-const title = "This is a test";
-// Pull request body
-const body = `This is a test of creating a PR using [octokit rest.js](https://github.com/octokit/rest.js/)
-
-:octocat: :smile: :star:
-`;
-// >>>>>
-
+const { Command } = require("commander");
 const { Octokit } = require("@octokit/rest");
-const { exit, env } = require("process");
+const { exit, env, argv } = require("process");
 const fs = require("fs").promises;
 
-const token = env["GITHUB_TOKEN"];
-if (!token) {
-  console.error(
-    "ERROR: GITHUB_TOKEN must be provided as an environment variable"
-  );
-  exit(2);
-}
-
-const octokit = new Octokit({ auth: token.trim() });
+var octokit;
 
 async function getCurrent(baseRepo) {
   let user, repo, ref, commit, tree;
@@ -162,11 +137,11 @@ async function createOrUpdateRef(current, commit, branch, force) {
   }
 }
 
-async function createPull(baseRepo, branch, source, dest, title, body) {
+async function createPull(baseRepo, branch, source, dest, title, body, force) {
   const current = await getCurrent(baseRepo);
   await getOrCreateFork(current);
   const commit = await createNewFile(current, source, dest);
-  await createOrUpdateRef(current, commit, branch, true);
+  await createOrUpdateRef(current, commit, branch, force);
   const head = `${current.user.login}:${branch}`;
 
   const currentPull = await octokit.pulls.list({
@@ -203,9 +178,53 @@ async function createPull(baseRepo, branch, source, dest, title, body) {
   }
 }
 
-createPull(baseRepo, branch, source, dest, title, body)
-  .then(() => console.log("Done!"))
-  .catch((err) => {
+function run(file, cmdObj) {
+  const baseSplit = cmdObj.base.split("/");
+  if (baseSplit.length != 2) {
+    throw Error('base must be in the form "owner/repository"');
+  }
+  const baseRepo = {
+    owner: baseSplit[0],
+    repo: baseSplit[1],
+  };
+
+  if (cmdObj.args.length != 1) {
+    throw Error("One local file path must be given");
+  }
+
+  const token = env["GITHUB_TOKEN"];
+  if (!token) {
+    console.error(
+      "ERROR: GITHUB_TOKEN must be provided as an environment variable"
+    );
+    exit(2);
+  }
+  octokit = new Octokit({ auth: token.trim() });
+
+  createPull(
+    baseRepo,
+    cmdObj.branch,
+    cmdObj.args[0],
+    cmdObj.dest,
+    cmdObj.title,
+    cmdObj.body,
+    cmdObj.force
+  ).catch((err) => {
     console.error(err);
     exit(1);
   });
+}
+
+const program = new Command();
+program
+  .command("addfile <file>")
+  .description("Add a local file to a repository")
+  .requiredOption("--base <base>", "The base repository (head fork)")
+  .requiredOption("--dest <dest>", "Destination in the repository for the file")
+  .requiredOption("--branch <branch>", "Name of head branch to be created")
+  .requiredOption("--title <title>", "Pull request title")
+  .option("--body <body>", "Pull request body")
+  .option("--force", "Pull request body")
+  .action(run);
+
+program.parse(argv);
