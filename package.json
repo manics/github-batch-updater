@@ -1,0 +1,23 @@
+{
+  "name": "github-batch-updater",
+  "version": "0.0.1",
+  "description": "Make basic additions to multiple GitHub repositories",
+  "main": "main.js",
+  "dependencies": {
+    "@octokit/rest": "^18.0.5"
+  },
+  "devDependencies": {
+    "prettier": "^2.1.1"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "lint": "prettier --check .",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/manics/github-batch-updater"
+  },
+  "author": "",
+  "license": "BSD-3-Clause"
+}
