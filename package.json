@@ -7,11 +7,12 @@
     "@octokit/rest": "^18.0.5"
   },
   "devDependencies": {
+    "eslint": "^7.8.1",
     "prettier": "^2.1.1"
   },
   "scripts": {
     "format": "prettier --write .",
-    "lint": "prettier --check .",
+    "lint": "prettier --check . && eslint .",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "repository": {
