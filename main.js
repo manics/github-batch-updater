@@ -5,14 +5,14 @@ const { Octokit } = require("@octokit/rest");
 const { exit, env } = require("process");
 const fs = require("fs").promises;
 
-const baseRepo = { owner: "manics", repo: "github-api-test" };
+const baseRepo = { owner: "manicstreetpreacher", repo: "github-api-test" };
 const source = "README.md";
 const dest = "dir2/README-2.md";
 const title = "This is a test";
 const branch = "test-new-ref";
 const body = `This is a test of creating a PR using [octokit rest.js](https://github.com/octokit/rest.js/)
 
-:smile: :star:
+:octocat: :smile: :star:
 `;
 
 const token = env["GITHUB_TOKEN"];
@@ -26,20 +26,34 @@ if (!token) {
 const octokit = new Octokit({ auth: token.trim() });
 
 async function getCurrent(baseRepo) {
-  const user = await octokit.users.getAuthenticated();
-  const repo = await octokit.repos.get({ ...baseRepo });
-  const ref = await octokit.git.getRef({
-    ...baseRepo,
-    ref: `heads/${repo.data.default_branch}`,
-  });
-  const commit = await octokit.git.getCommit({
-    ...baseRepo,
-    commit_sha: ref.data.object.sha,
-  });
-  const tree = await octokit.git.getTree({
-    ...baseRepo,
-    tree_sha: commit.data.tree.sha,
-  });
+  let user, repo, ref, commit, tree;
+  try {
+    user = await octokit.users.getAuthenticated();
+  } catch (err) {
+    throw Error(`Failed to get current user: ${err}`);
+  }
+  try {
+    repo = await octokit.repos.get({ ...baseRepo });
+  } catch (err) {
+    throw Error(`Failed to get base repo: ${err}`);
+  }
+
+  try {
+    ref = await octokit.git.getRef({
+      ...baseRepo,
+      ref: `heads/${repo.data.default_branch}`,
+    });
+    commit = await octokit.git.getCommit({
+      ...baseRepo,
+      commit_sha: ref.data.object.sha,
+    });
+    tree = await octokit.git.getTree({
+      ...baseRepo,
+      tree_sha: commit.data.tree.sha,
+    });
+  } catch (err) {
+    throw Error(`Failed to get base repo default ref: ${err}`);
+  }
   console.log(
     `User: ${user.data.login}, Base repository: ${repo.data.full_name}`
   );
@@ -67,6 +81,7 @@ async function getOrCreateFork(current) {
       owner: current.repo.owner.login,
       repo: current.repo.name,
     });
+    console.log("Created fork");
     return fork;
   }
 }
@@ -76,12 +91,14 @@ async function createNewFile(current, source, dest) {
     owner: current.user.login,
     repo: current.repo.name,
   };
+
   const content = await fs.readFile(source);
   const blob = await octokit.git.createBlob({
     ...headRepo,
     content: content.toString("base64"),
     encoding: "base64",
   });
+
   const newtree = await octokit.git.createTree({
     ...headRepo,
     tree: [
@@ -94,6 +111,7 @@ async function createNewFile(current, source, dest) {
     ],
     base_tree: current.tree.sha,
   });
+
   const newcommit = await octokit.git.createCommit({
     ...headRepo,
     message: "Test commit",
@@ -109,7 +127,14 @@ async function createOrUpdateRef(current, commit, branch, force) {
     owner: current.user.login,
     repo: current.repo.name,
   };
-  try {
+
+  // This returns matching prefixes, not exact matches
+  const currentRef = await octokit.git.listMatchingRefs({
+    ...headRepo,
+    ref: `heads/${branch}`,
+  });
+
+  if (currentRef.data.some((r) => r.ref === `refs/heads/${branch}`)) {
     const ref = await octokit.git.updateRef({
       ...headRepo,
       ref: `heads/${branch}`,
@@ -118,7 +143,7 @@ async function createOrUpdateRef(current, commit, branch, force) {
     });
     console.log(`Updated branch ${ref.data.ref}`);
     return ref.data;
-  } catch (err) {
+  } else {
     const ref = await octokit.git.createRef({
       ...headRepo,
       ref: `refs/heads/${branch}`,
@@ -131,8 +156,9 @@ async function createOrUpdateRef(current, commit, branch, force) {
 
 async function createPull(baseRepo, branch, source, dest, title, body) {
   const current = await getCurrent(baseRepo);
+  await getOrCreateFork(current);
   const commit = await createNewFile(current, source, dest);
-  const ref = await createOrUpdateRef(current, commit, branch, true);
+  await createOrUpdateRef(current, commit, branch, true);
   const head = `${current.user.login}:${branch}`;
 
   const currentPull = await octokit.pulls.list({
@@ -140,7 +166,7 @@ async function createPull(baseRepo, branch, source, dest, title, body) {
     head: head,
   });
 
-  if (currentPull.data) {
+  if (currentPull.data.length) {
     const pull = await octokit.pulls.update({
       ...baseRepo,
       title: title,
@@ -169,6 +195,9 @@ async function createPull(baseRepo, branch, source, dest, title, body) {
   }
 }
 
-createPull(baseRepo, branch, source, dest, title, body).then((p) =>
-  console.log("Done!")
-);
+createPull(baseRepo, branch, source, dest, title, body)
+  .then(() => console.log("Done!"))
+  .catch((err) => {
+    console.error(err);
+    exit(1);
+  });
