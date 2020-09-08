@@ -4,7 +4,8 @@
 const { Command } = require("commander");
 const { Octokit } = require("@octokit/rest");
 const { exit, env, argv } = require("process");
-const fs = require("fs").promises;
+const { promisify } = require("util");
+const { readFile } = require("fs");
 
 var octokit;
 
@@ -72,7 +73,7 @@ async function createNewFile(current, source, dest, message) {
     repo: current.repo.name,
   };
 
-  const content = await fs.readFile(source);
+  const content = await promisify(readFile)(source);
   const { data: blob } = await octokit.git.createBlob({
     ...headRepo,
     content: content.toString("base64"),
