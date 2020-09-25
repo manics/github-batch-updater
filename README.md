@@ -2,7 +2,7 @@
 
 Script to help make basic additions to multiple GitHub repositories.
 
-Currently this just adds a single file and opens a pull request.
+Currently this just adds a single file and opens a pull request against the default branch.
 
 ## Installation
 

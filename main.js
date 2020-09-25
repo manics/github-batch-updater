@@ -3,6 +3,7 @@
 
 const { Command } = require("commander");
 const { Octokit } = require("@octokit/rest");
+const { Buffer } = require("buffer");
 const { exit, env, argv } = require("process");
 const { promisify } = require("util");
 const { readFile } = require("fs");
@@ -67,13 +68,30 @@ async function getOrCreateFork(current) {
   }
 }
 
-async function createNewFile(current, source, dest, message) {
+async function getCurrentFile(current, path) {
+  try {
+    const { data: currentFile } = await octokit.repos.getContent({
+      owner: current.repo.owner.login,
+      repo: current.repo.name,
+      ref: current.repo.default_branch,
+      path: path,
+    });
+    const buffer = Buffer.from(currentFile.content, currentFile.encoding);
+    return buffer;
+  } catch (err) {
+    if (err.status == 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+async function createNewFile(current, content, dest, message) {
   const headRepo = {
     owner: current.user.login,
     repo: current.repo.name,
   };
 
-  const content = await promisify(readFile)(source);
   const { data: blob } = await octokit.git.createBlob({
     ...headRepo,
     content: content.toString("base64"),
@@ -135,10 +153,23 @@ async function createOrUpdateRef(current, commit, branch, force) {
   }
 }
 
-async function createPull(baseRepo, branch, source, dest, title, body, force) {
+async function createPull(baseRepo, source, branch, dest, title, body, force) {
   const current = await getCurrent(baseRepo);
+  const content = await promisify(readFile)(source);
+
+  const currentFile = await getCurrentFile(current, dest);
+  // console.log(`source: ${content}`)
+  // console.log(`currentFile: ${currentFile}`)
+
+  if (currentFile && content.equals(currentFile)) {
+    console.log(
+      `${current.repo.full_name}/${current.repo.default_branch} ${dest} is already up to date`
+    );
+    return;
+  }
+
   await getOrCreateFork(current);
-  const commit = await createNewFile(current, source, dest, body);
+  const commit = await createNewFile(current, content, dest, body);
   await createOrUpdateRef(current, commit, branch, force);
   const head = `${current.user.login}:${branch}`;
 
@@ -200,8 +231,8 @@ function run(file, cmdObj) {
 
   createPull(
     baseRepo,
-    cmdObj.branch,
     cmdObj.args[0],
+    cmdObj.branch,
     cmdObj.dest,
     cmdObj.title,
     cmdObj.body,
