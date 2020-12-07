@@ -4,12 +4,12 @@
   "description": "Make basic additions to multiple GitHub repositories",
   "main": "main.js",
   "dependencies": {
-    "@octokit/rest": "^18.0.5",
-    "commander": "^6.1.0"
+    "@octokit/rest": "^18.0.12",
+    "commander": "^6.2.0"
   },
   "devDependencies": {
-    "eslint": "^7.8.1",
-    "prettier": "^2.1.1"
+    "eslint": "^7.15.0",
+    "prettier": "^2.2.1"
   },
   "scripts": {
     "format": "prettier --write .",

@@ -86,28 +86,64 @@ async function getCurrentFile(current, path) {
   }
 }
 
-async function createNewFile(current, content, dest, message) {
+async function updateFiles(current, addfiles, destfiles, rmfiles, message) {
   const headRepo = {
     owner: current.user.login,
     repo: current.repo.name,
   };
 
-  const { data: blob } = await octokit.git.createBlob({
-    ...headRepo,
-    content: content.toString("base64"),
-    encoding: "base64",
-  });
+  let blobs = []
+  for (let i = 0; i < addfiles.length; i++) {
+    const dest = destfiles[i];
+    const content = await promisify(readFile)(addfiles[i]);
+    const currentFile = await getCurrentFile(current, dest);
+    // console.log(`source: ${content}`)
+    // console.log(`currentFile: ${currentFile}`)
+
+    if (currentFile && content.equals(currentFile)) {
+      console.log(
+        `${current.repo.full_name}/${current.repo.default_branch} ${dest} is already up to date`
+      );
+      continue;
+    }
+
+    // const { data: blob } = await octokit.git.createBlob({
+    //   ...headRepo,
+    //   content: content.toString("base64"),
+    //   encoding: "base64",
+    // });
+    blobs.push({
+      path: dest,
+      type: "blob",
+      mode: "100644",
+      // sha: blob.sha,
+      content: content.toString(),
+    });
+  }
+
+  for (let i = 0; i < rmfiles.length; i++) {
+    const rm = rmfiles[i]
+    const currentFile = await getCurrentFile(current, rm);
+    if (currentFile) {
+      blobs.push({
+        path: rm,
+        type: "blob",
+        mode: "100644",
+        sha: null,
+      });
+    }
+  }
+
+  if (!blobs.length) {
+    console.log(
+      `${current.repo.full_name}/${current.repo.default_branch} is already up to date`
+    );
+    return;
+  }
 
   const { data: newtree } = await octokit.git.createTree({
     ...headRepo,
-    tree: [
-      {
-        path: dest,
-        type: "blob",
-        mode: "100644",
-        sha: blob.sha,
-      },
-    ],
+    tree: blobs,
     base_tree: current.tree.sha,
   });
 
@@ -153,23 +189,16 @@ async function createOrUpdateRef(current, commit, branch, force) {
   }
 }
 
-async function createPull(baseRepo, source, branch, dest, title, body, force) {
+async function createPull(baseRepo, branch, addfiles, destfiles, rmfiles, title, body, force) {
   const current = await getCurrent(baseRepo);
-  const content = await promisify(readFile)(source);
 
-  const currentFile = await getCurrentFile(current, dest);
-  // console.log(`source: ${content}`)
-  // console.log(`currentFile: ${currentFile}`)
+  await getOrCreateFork(current);
+  const commit = await updateFiles(current, addfiles, destfiles, rmfiles, body);
 
-  if (currentFile && content.equals(currentFile)) {
-    console.log(
-      `${current.repo.full_name}/${current.repo.default_branch} ${dest} is already up to date`
-    );
+  if (!commit) {
     return;
   }
 
-  await getOrCreateFork(current);
-  const commit = await createNewFile(current, content, dest, body);
   await createOrUpdateRef(current, commit, branch, force);
   const head = `${current.user.login}:${branch}`;
 
@@ -203,18 +232,21 @@ async function createPull(baseRepo, source, branch, dest, title, body, force) {
   }
 }
 
-function run(file, cmdObj) {
+function run(cmdObj) {
   const baseSplit = cmdObj.base.split("/");
   if (baseSplit.length != 2) {
     throw Error('base must be in the form "owner/repository"');
+  }
+  if (cmdObj.addfile.length != cmdObj.destfile.length) {
+    throw Error(`Received ${cmdObj.addfile.length} files to add but ${cmdObj.destfile.length} destinations`);
   }
   const baseRepo = {
     owner: baseSplit[0],
     repo: baseSplit[1],
   };
 
-  if (cmdObj.args.length != 1) {
-    throw Error("One local file path must be given");
+  if (!cmdObj.addfile.length && !cmdObj.rmfile.length) {
+    throw Error("At least one addfile or rmfile required");
   }
 
   const token = env["GITHUB_TOKEN"];
@@ -231,9 +263,10 @@ function run(file, cmdObj) {
 
   createPull(
     baseRepo,
-    cmdObj.args[0],
     cmdObj.branch,
-    cmdObj.dest,
+    cmdObj.addfile,
+    cmdObj.destfile,
+    cmdObj.rmfile,
     cmdObj.title,
     cmdObj.body,
     cmdObj.force
@@ -243,16 +276,21 @@ function run(file, cmdObj) {
   });
 }
 
+function collect(value, previous) {
+  return previous.concat([value]);
+}
+
 const program = new Command();
 program
-  .command("addfile <file>")
-  .description("Add a local file to a repository")
+  .version('0.0.1')
   .requiredOption("--base <base>", "The base repository (head fork)")
-  .requiredOption("--dest <dest>", "Destination in the repository for the file")
   .requiredOption("--branch <branch>", "Name of head branch to be created")
   .requiredOption("--title <title>", "Pull request title")
   .option("--body <body>", "Pull request body")
   .option("--force", "Pull request body")
+  .option("--addfile <file>", "Add local files to a repository", collect, [])
+  .option("--destfile <file>", "Destination in the repository for added files", collect, [])
+  .option("--rmfile <file>", "Remove files from a repository", collect, [])
   .action(run);
 
 program.parse(argv);
