@@ -191,6 +191,9 @@ async function createOrUpdateRef(current, commit, branch, force) {
 
 async function createPull(baseRepo, branch, addfiles, destfiles, rmfiles, title, body, force) {
   const current = await getCurrent(baseRepo);
+  if (current.repo.archived) {
+    throw Error('Repository is archived');
+  }
 
   await getOrCreateFork(current);
   const commit = await updateFiles(current, addfiles, destfiles, rmfiles, body);
